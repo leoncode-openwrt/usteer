@@ -1,6 +1,6 @@
-# Begrenzte Remote-Updates testen
+# Testing bounded remote updates
 
-Mit den normalen Usteer-Buildabhängigkeiten:
+With the regular Usteer build dependencies installed:
 
 ```sh
 cmake -S . -B build-test -DBUILD_TESTING=ON
@@ -8,45 +8,47 @@ cmake --build build-test
 ctest --test-dir build-test --output-on-failure
 ```
 
-Für ASan/UBSan zusätzlich beim Konfigurieren:
+For ASan/UBSan, also pass these options when configuring:
 
 ```sh
 -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
 -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
 ```
 
-Der Test nutzt den unveränderten Parser aus `parse.c`. Er prüft die
-byteidentische Weitergabe kleiner Nachrichten, eine Grenze exakt auf und
-knapp unter der Nachrichtengröße, 1.001 Paketgrenzen von 200 bis 1.200 Byte
-mit jeweils 300 Stationen auf zwei APs sowie einen dritten leeren AP.
-Stationsdaten dürfen weder fehlen noch doppelt vorkommen. Metadaten,
-unbekannte AP-Felder und der Eingabepuffer müssen unverändert bleiben.
-Weitere Fälle: unteilbare übergroße Metadaten im letzten AP, übergroße
-Stationsdatensätze, zu kleine MTUs, reine Host-Updates und Sendefehler.
-Zwei Tests senden und empfangen die Nachrichten über lokale IPv4-/IPv6-
-UDP-Sockets; IPv6-Loopback muss in der Testumgebung verfügbar sein.
+The test uses the unchanged parser from `parse.c`. It checks byte-identical
+forwarding of small messages, limits exactly at and just below the message
+size, and 1,001 payload limits from 200 to 1,200 bytes with 300 stations
+across two nodes plus a third, empty node. Station records must not be lost
+or duplicated. Metadata, unknown node fields and the input buffer must be
+preserved. Further cases cover indivisible oversized metadata in the last
+node, oversized station records, small MTUs, host-only updates and send
+errors. Two tests send and receive messages through actual IPv4/IPv6
+loopback UDP sockets; IPv6 loopback must be available in the test environment.
 
-## Protokoll und Grenzen
+`remote-socket` also exercises the actual send path with mocked system
+calls: no MTU query before socket registration or after removal, valid
+descriptor 0 and a controlled MTU query failure. The initial periodic send
+is started only after socket initialization.
 
-Die Aufteilung verwendet ausschließlich bestehende Nachrichtenfelder.
-Jeder Teil enthält dieselben Host-Metadaten und dieselbe Sequenznummer des
-logischen Updates. Der bestehende Empfänger verwendet die Sequenznummer
-nicht zur Duplikatunterdrückung und aktualisiert Stationsdatensätze einzeln;
-fehlende Stationen werden nicht wegen eines Teilupdates gelöscht.
-Der Patch benötigt keine neue Empfangslogik und keinen gleichzeitigen
-Versionswechsel aller Gegenstellen. Dies ist durch Parser- und Datentests
-gestützt, ersetzt aber keinen Mehr-AP-Betriebstest.
+## Protocol and limitations
 
-Das UDP-Nutzlastlimit ist höchstens 1.200 Byte und bei kleineren lokalen
-Interface-MTUs zusätzlich um IPv4-/IPv6- und UDP-Header reduziert. Das
-ist keine allgemeine Path-MTU-Ermittlung für Tunnel oder fremde Routen.
-Die gesamte Nachricht wird vor dem ersten Teil auf Teilbarkeit geprüft.
-Ein einzelner zu großer Metadatenblock oder Stationsdatensatz führt zu
-`EMSGSIZE` und einem protokollierten Sendefehler, nicht zu Abschneiden oder
-einem Rückfall auf übergroße Datagramme. Ein späterer Socket-Sendefehler
-kann wie gewöhnlicher UDP-Verlust ein unvollständig empfangenes Update
-hinterlassen; die nächste periodische Aktualisierung erfolgt weiterhin.
+Splitting uses only existing message fields. Each chunk contains the same
+host metadata and sequence number as the logical update. The existing
+receiver does not use the sequence number to suppress duplicates and
+updates station records individually; missing stations are not deleted
+because an update contains only a subset. No new receive logic or
+simultaneous upgrade of all peers is required. Parser and data tests
+support this, but do not replace a multi-AP deployment test.
 
-Der Patch soll IP-Fragmentierung der Usteer-Updates auf den vorgesehenen
-LAN-Interfaces vermeiden. Er ist kein Nachweis einer Behebung sonstiger
-WLAN-, Shelly- oder HomePod-Probleme.
+The UDP payload limit is at most 1,200 bytes and is reduced further for
+smaller local interface MTUs, accounting for IPv4/IPv6 and UDP headers.
+This is not general path-MTU discovery for tunnels or routed networks.
+The entire message is checked for splittability before sending any chunk.
+An indivisible oversized metadata block or station record produces
+`EMSGSIZE` and a logged send error, not truncation or an oversized fallback.
+A later socket send error can still leave a partially received update,
+as with ordinary UDP loss; subsequent periodic updates continue normally.
+
+The patch is intended to avoid IP fragmentation of Usteer updates on the
+intended LAN interfaces. It does not establish a fix for unrelated radio
+or client connectivity problems.

@@ -37,7 +37,7 @@
 #include "node.h"
 
 static uint32_t local_id;
-static struct uloop_fd remote_fd;
+static struct uloop_fd remote_fd = { .fd = -1 };
 static struct uloop_timeout remote_timer;
 static struct uloop_timeout reload_timer;
 
@@ -556,6 +556,10 @@ static void interface_send_msg(struct interface *iface, struct blob_attr *data)
 	size_t limit;
 	int ret;
 
+	/* Node notifications can arrive before the remote socket is ready. */
+	if (!remote_fd.registered)
+		return;
+
 	snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", interface_name(iface));
 	if (ioctl(remote_fd.fd, SIOCGIFMTU, &ifr) < 0) {
 		MSG(FATAL, "Cannot read MTU for %s: %s\n", interface_name(iface), strerror(errno));
@@ -770,7 +774,7 @@ static int usteer_create_v6_socket() {
 
 static void usteer_reload_timer(struct uloop_timeout *t) {
 	/* Remove uloop descriptor */
-	if (remote_fd.fd && remote_fd.registered) {
+	if (remote_fd.fd >= 0) {
 		uloop_fd_delete(&remote_fd);
 		close(remote_fd.fd);
 	}
@@ -794,11 +798,11 @@ int usteer_interface_init(void)
 	if (usteer_init_local_id())
 		return -1;
 
-	remote_timer.cb = usteer_send_update_timer;
-	remote_timer.cb(&remote_timer);
-
 	reload_timer.cb = usteer_reload_timer;
 	reload_timer.cb(&reload_timer);
+
+	remote_timer.cb = usteer_send_update_timer;
+	remote_timer.cb(&remote_timer);
 
 	return 0;
 }
