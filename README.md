@@ -1,4 +1,8 @@
-# usteer
+# LeonCode Usteer
+
+OpenWrt Usteer with reviewed peer transport fixes. See [LEONCODE.md](LEONCODE.md)
+for the exact changes and [packages](https://github.com/leoncode-openwrt/packages)
+for automated release builds.
 
 usteer is a client steering daemon written for OpenWrt.
 
