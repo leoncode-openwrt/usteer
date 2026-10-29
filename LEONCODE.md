@@ -1,6 +1,6 @@
 # LeonCode Usteer maintenance
 
-`leoncode/stable` preserves two independently reviewable changes on the OpenWrt
+`main` preserves two independently reviewable changes on the OpenWrt
 history:
 
 - `91a7369`: bound peer updates to MTU-safe UDP datagrams.
